@@ -10,9 +10,28 @@ def r_squared(predictions, targets):
     r2 = 1 - ss_res / ss_tot
     return r2
 
+
+class MinMaxScaler:
+    def __init__(self):
+        self.min = 0.
+        self.max = 255.
+
+    def fit(self, x):
+        self.min_val = torch.min(x, dim=0)[0] 
+        self.max_val = torch.max(x, dim=0)[0]
+
+    def transform(self, x):
+        return (x - self.min) / (self.max - self.min + 1e-6)
+
+    def inverse_transform(self, x):
+        return x * (self.max - self.min) + self.min
+    
+
 class MultiTaskRegressor(pl.LightningModule):
     def __init__(self):
         super().__init__()
+
+        self.scaler = MinMaxScaler()
 
         self.lstm = nn.LSTM(input_size=128, hidden_size=64, num_layers=4,dropout=0.25, batch_first=True)
         self.relu = nn.ReLU()
@@ -23,6 +42,7 @@ class MultiTaskRegressor(pl.LightningModule):
             nn.Dropout(p=0.25),
             nn.Linear(32, 8),
             nn.ReLU(),
+            nn.Dropout(p=0.25),
             nn.Linear(8, 1),
             nn.Tanh()  # Assuming valence is a score between -1 and 1
         )
@@ -34,6 +54,7 @@ class MultiTaskRegressor(pl.LightningModule):
             nn.Dropout(p=0.25),
             nn.Linear(32, 8),
             nn.ReLU(),
+            nn.Dropout(p=0.25),
             nn.Linear(8, 1),
             nn.Tanh()  # Assuming arousal is a score between -1 and 1
         )
@@ -41,6 +62,7 @@ class MultiTaskRegressor(pl.LightningModule):
 
     def forward(self, x):
         batch_size, seq_length, _ = x.shape
+        x = self.scaler.transform(x)
         x, _ = self.lstm(x)
 
         #fully connected layers applied for each time step
@@ -96,4 +118,4 @@ class MultiTaskRegressor(pl.LightningModule):
         return {'valence_loss': valence_loss, 'arousal_loss': arousal_loss, 'loss': total_loss, 'valence_r2': valence_r2, 'arousal_r2': arousal_r2}
     
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.01, weight_decay=1e-4)
+        return torch.optim.Adam(self.parameters(), lr=0.001, weight_decay=1e-4)

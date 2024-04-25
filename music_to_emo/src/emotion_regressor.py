@@ -10,9 +10,26 @@ def r_squared(predictions, targets):
     r2 = 1 - ss_res / ss_tot
     return r2
 
+class MinMaxScaler:
+    def __init__(self):
+        self.min = 0.
+        self.max = 255.
+
+    def fit(self, x):
+        self.min_val = torch.min(x, dim=0)[0] 
+        self.max_val = torch.max(x, dim=0)[0]
+
+    def transform(self, x):
+        return (x - self.min) / (self.max - self.min + 1e-6)
+
+    def inverse_transform(self, x):
+        return x * (self.max - self.min) + self.min
+
 class EmotionRegressor(pl.LightningModule):
     def __init__(self):
         super().__init__()
+
+        self.scaler = MinMaxScaler()
 
         self.lstm = nn.LSTM(input_size=128, hidden_size=64, num_layers=4,dropout=0.25, batch_first=True)
 
@@ -29,6 +46,7 @@ class EmotionRegressor(pl.LightningModule):
 
     def forward(self, x):
         batch_size, seq_length, _ = x.shape
+        x = self.scaler.transform(x)
         x, _ = self.lstm(x)
         #fully connected layers applied for each time step
         x = x.contiguous().view(-1, x.shape[2])
@@ -82,4 +100,4 @@ class EmotionRegressor(pl.LightningModule):
         return {'valence_loss': valence_loss, 'arousal_loss': arousal_loss, 'loss': total_loss, 'valence_r2': valence_r2, 'arousal_r2': arousal_r2}
     
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.01, weight_decay=1e-4)
+        return torch.optim.Adam(self.parameters(), lr=0.001, weight_decay=1e-4)
